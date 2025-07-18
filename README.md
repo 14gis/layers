@@ -1,6 +1,6 @@
-# 14gis-core
+# 14gis-layers
 
-**Core backend service for the 14gis platform.**  
+**Layers backend service for the 14gis platform.**  
 Provides the proxy layer, role-based layer access, and data routing for geospatial analysis and decision support.
 
 ## Purpose
@@ -26,7 +26,7 @@ This service acts as the core of the 14gis system, enabling:
 ## Structure (planned)
 
 ```
-/src            → Core logic
+/src            → Layers logic
 /config         → Layer config, routing, roles
 /tests          → Unit and integration tests
 /docs           → Internal docs (e.g. API overview, config format)
