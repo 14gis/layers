@@ -8,6 +8,11 @@
       "Gis14\\Layers\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  },
   "require": {
     "php": ">=8.2",
     "symfony/yaml": "^7.0",
@@ -20,5 +25,13 @@
   },
   "scripts": {
     "build": "php bin/compile.php"
+  },
+  "require-dev": {
+    "pestphp/pest": "^3.8"
+  },
+  "config": {
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
   }
 }
