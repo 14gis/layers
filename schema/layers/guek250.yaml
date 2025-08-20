@@ -44,7 +44,7 @@ providers:
   # Kachel/Overlay-Quelle (kann identisch zur Feature-Quelle sein)
   tiles:
     type: arcgis-rest
-    url: "https://example.arcgis.com/arcgis/rest/services/guek250/MapServer"
+    url: "https://services.bgr.de/arcgis/rest/services/geologie/guek250/MapServer"
     layerId: 0
     authRef: null
     timeoutMs: 6000
@@ -58,7 +58,7 @@ providers:
   # Identify-/Feature-Quelle
   features:
     type: arcgis-rest
-    url: "https://example.arcgis.com/arcgis/rest/services/guek250/MapServer"
+    url: "https://services.bgr.de/arcgis/rest/services/geologie/guek250/MapServer"
     layerId: 0
     supportsIdentify: true
     authRef: "arcgis_guek250_token"   # Secret-Store-Referenz (falls nötig)

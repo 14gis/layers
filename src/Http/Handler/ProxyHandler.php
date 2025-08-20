@@ -19,15 +19,36 @@ final class ProxyHandler implements RequestHandlerInterface
         $p = (array) $request->getAttribute('routeParams', []);
         $context = $p['context'] ?? 'geochron';
         $layerId = $p['layerId'] ?? '';
-        $rest = $p['rest'] ?? '';
-        $layer = $this->repo->findOne($context, $layerId);
-        if (!$layer || empty($layer['source']['url'])) {
+
+        $rest   = $p['rest'] ?? '';
+        $layer  = $this->repo->findOne($context, $layerId);
+
+        $featUrl = $layer['source']['features']['url'] ?? null;
+        $tileUrl = $layer['source']['tiles']['url'] ?? null;
+
+        // Heuristik: alles mit query/identify/FeatureServer → features, sonst tiles
+        $useFeatures = preg_match('~\b(query|identify)\b~i', $rest) ||
+            str_contains($rest, 'FeatureServer');
+
+        $base = $useFeatures ? $featUrl : $tileUrl;
+
+        if (!$layer || !$base) {
             $res = $this->responses->createResponse(404)->withHeader('Content-Type','application/json');
             $res->getBody()->write(json_encode(['error'=>'Unknown layer or source url missing']));
             return $res;
         }
-        $base = rtrim($layer['source']['url'], '/');
+
+        $base   = rtrim($base, '/');
+
         $target = $base . '/' . ltrim($rest, '/');
+
+        // ???
+        if (preg_match('~/query\b~i', $rest) && isset($layer['source']['features']['layers'][0])) {
+            $idx   = $layer['source']['features']['layers'][0];
+            $target = $base . '/' . $idx . '/' . ltrim($rest, '/'); // …/MapServer/{0}/query
+        }
+        // ???
+
         $query = $request->getUri()->getQuery();
         if ($query !== '') $target .= '?' . $query;
 
