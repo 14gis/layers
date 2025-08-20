@@ -3,6 +3,8 @@ use FastRoute\RouteCollector;
 use Gis14\Layers\Http\Handler\{CapabilitiesHandler, IdentifyHandler, ProxyHandler};
 use Gis14\Layers\Http\Middleware\{ErrorMiddleware, RoutingMiddleware};
 use Gis14\Layers\Infrastructure\Factory\LayerFactory;
+use Gis14\Layers\Infrastructure\Gateway\FakeIdentifyGateway;
+use Gis14\Layers\Infrastructure\Gateway\IdentifyGatewayInterface;
 use Gis14\Layers\Infrastructure\Gateway\JsonLayerGateway;
 use Gis14\Layers\Infrastructure\Repository\LayerRepository;
 use Gis14\Layers\Infrastructure\Repository\LayerRepositoryInterface;
@@ -26,8 +28,21 @@ $container->set(LayerRepositoryInterface::class, fn() =>
     )
 );
 
+// choose identify gateway via ENV (default: fake for now)
+$container->set(IdentifyGatewayInterface::class, fn() =>
+    new FakeIdentifyGateway()
+);
+
 $container->set(CapabilitiesHandler::class, fn($c) => new CapabilitiesHandler($c->get(LayerRepositoryInterface::class), $psr17));
-$container->set(IdentifyHandler::class, fn() => new IdentifyHandler($psr17));
+
+$container->set(IdentifyHandler::class, fn($c) =>
+    new IdentifyHandler(
+        $c->get(LayerRepositoryInterface::class),
+        $c->get(IdentifyGatewayInterface::class),
+        $psr17
+    )
+);
+
 $container->set(ProxyHandler::class, fn($c) => new ProxyHandler($c->get(LayerRepositoryInterface::class), $psr17));
 
 $dispatcher = FastRoute\simpleDispatcher(function (RouteCollector $r) {
