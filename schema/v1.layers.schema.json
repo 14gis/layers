@@ -1,0 +1,66 @@
+{
+  "$id": "https://14gis.org/layers/schema/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["id", "meta", "project", "context", "providers"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "meta": {
+      "type": "object",
+      "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "version": {"type": "string"},
+        "schemaVersion": {"type": "string"},
+        "contentVersion": {"type": "string"},
+        "updatedAt": {"type": "string"}
+      },
+      "required": ["title"],
+      "additionalProperties": true
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "allowed": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+      },
+      "required": ["allowed"],
+      "additionalProperties": true
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "roles": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "bbox": {"type": "array"},
+        "scaleRange": {"type": "object"}
+      },
+      "required": ["roles"],
+      "additionalProperties": true
+    },
+    "providers": {
+      "type": "object",
+      "properties": {
+        "features": {
+          "type": "object",
+          "properties": {
+            "type": {"type": "string"},
+            "url": {"type": "string", "minLength": 1},
+            "layerId": {"type": "integer", "minimum": 0},
+            "supportsIdentify": {"type": "boolean"}
+          },
+          "required": ["type", "url", "layerId"],
+          "additionalProperties": true
+        },
+        "tiles": {"type": "object", "additionalProperties": true}
+      },
+      "required": ["features"],
+      "additionalProperties": true
+    },
+    "identify": {
+      "type": "object",
+      "properties": {
+        "fields": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

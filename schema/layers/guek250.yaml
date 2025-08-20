@@ -1,0 +1,176 @@
+# file: schema/layers/guek250.yaml
+# Consolidated layer schema (latest) for GeoChron MVP
+
+id: guek250
+slug: guek250
+kind: vector-overlay
+status: active
+
+meta:
+  title: "Geologische Übersichtskarte 1:250.000 (GÜK250)"
+  description: >
+    Generalisierte geologische Einheiten Deutschlands. Dient in GeoChron als
+    Basis-Overlay inkl. Identify @Point. Quelle/Lizenz bitte real eintragen.
+  version: "2025-08-20"
+  updatedAt: "2025-08-20T00:00:00Z"
+  tags: [geology, stratigraphy, germany, geochron]
+
+project:
+  allowed: [geochron]
+
+context:
+  # Fachliche (semantische) Rollen — wovon spricht das Frontend?
+  roles:
+    - geology/stratigraphy
+  # Räumliche Abdeckung
+  bbox:
+    - [5.5, 47.0]     # minLon, minLat
+    - [15.5, 55.5]    # maxLon, maxLat
+  # Maßstabsbereich, als Nenner (1:n)
+  scaleRange:
+    denomMin: 200000
+    denomMax: 500000
+  # Optionale fachliche Filter (projekt-/kontextabhängig)
+  filters:
+    - quaternary_only: false
+
+layer:
+  # Technische Rollen — wie darf der Layer genutzt werden?
+  roles: [base, identify]
+  defaultSelected: true     # für Layer-Listen/Capabilities
+  selectable: true
+
+providers:
+  # Kachel/Overlay-Quelle (kann identisch zur Feature-Quelle sein)
+  tiles:
+    type: arcgis-rest
+    url: "https://example.arcgis.com/arcgis/rest/services/guek250/MapServer"
+    layerId: 0
+    authRef: null
+    timeoutMs: 6000
+    requestPolicy:
+      userAgent: "14gis-layers-proxy/1.0"
+      referer: { mode: fixed, value: "https://layers.14gis.org/geochron" }
+      forwardClientIp: false
+      retries: { max: 1, backoffMs: 250 }
+      rateLimit: { rpm: 600, burst: 100 }
+
+  # Identify-/Feature-Quelle
+  features:
+    type: arcgis-rest
+    url: "https://example.arcgis.com/arcgis/rest/services/guek250/MapServer"
+    layerId: 0
+    supportsIdentify: true
+    authRef: "arcgis_guek250_token"   # Secret-Store-Referenz (falls nötig)
+    timeoutMs: 8000
+    requestPolicy:
+      userAgent: "14gis-layers-proxy/1.0"
+      referer: { mode: fixed, value: "https://layers.14gis.org/geochron" }
+      forwardClientIp: false
+      allowedParams: ["f","geometry","geometryType","inSR","outSR"]
+      maxBBox:
+        - [-10.0, 35.0]
+        - [ 25.0, 60.0]
+
+schema:
+  # Upstream → kanonische Felder (Proxy normalisiert immer auf die rechten Namen)
+  fieldMap:
+    UNIT_CODE: "GKZ"
+    UNIT_NAME: "Einheit"
+    LITHOLOGY: "Lithologie"
+    AGE_MIN_MA: "Alter_min_Ma"
+    AGE_MAX_MA: "Alter_max_Ma"
+    SOURCE_ID: "ObjektID"
+    LEGEND_KEY: "Legende"
+  types:
+    UNIT_CODE: string
+    UNIT_NAME: string
+    LITHOLOGY: string
+    AGE_MIN_MA: number
+    AGE_MAX_MA: number
+    SOURCE_ID: string
+    LEGEND_KEY: string
+
+identify:
+  # Welche Felder werden als Ergebnis garantiert geliefert (kanonisch)?
+  fields: [UNIT_NAME, LITHOLOGY, AGE_MIN_MA, AGE_MAX_MA]
+  formatting:
+    title: "${UNIT_NAME}"
+    subtitle: "Lithologie: ${LITHOLOGY}"
+    details:
+      - { label: "Alter (Ma)", value: "${AGE_MIN_MA} – ${AGE_MAX_MA}" }
+  provenance:
+    include: [SOURCE_ID, LEGEND_KEY]
+    add:
+      dataset: "GÜK250"
+      license: "CC BY 4.0"     # Platzhalter
+      attribution: "BGR / Landesämter (Proxy)"
+
+style:
+  # Client-agnostische Hinweise (können vom Proxy/Frontend genutzt werden)
+  tiles:
+    opacity: 0.85
+  legend:
+    keyField: LEGEND_KEY
+
+tiles:
+  # Anzeige-/Zoomregeln für Tile-Endpoints
+  minZoom: 5
+  maxZoom: 14
+
+cache:
+  tiles:
+    enabled: true
+    ttlSeconds: 86400           # 1 Tag
+    strategy: filesystem
+    keyParts: [layer, z, x, y, schemaVersion]
+  data:
+    enabled: true
+    ttlSeconds: 604800          # 7 Tage
+    backend: postgis
+    grid:
+      enabled: false
+      cellSizeMeters: 250
+    keyParts: [project, role, layer, op, geomHash, filtersHash, schemaVersion]
+
+crs:
+  native: "EPSG:3857"
+  supported: ["EPSG:4326", "EPSG:3857"]
+  default: "EPSG:4326"
+  transform:
+    allow: true
+
+constraints:
+  crs:
+    allowed: ["EPSG:4326", "EPSG:3857"]
+  geometry:
+    maxVertices: 5000
+    maxAreaKm2: 50000
+  query:
+    maxFeatures: 2000
+    requirePagination: true
+    allowedFilters: ["UNIT_NAME", "AGE_MIN_MA", "AGE_MAX_MA"]
+
+limits:
+  rate: { requestsPerMinute: 120 }
+  timeoutMs: 9000
+
+security:
+  cors:
+    allowedOrigins: ["*"]              # MVP: offen; später projektspezifisch
+  apiKeys:
+    required: false                      # kann per Projekt aktiviert werden
+
+attribution:
+  text: "© Datenquellen via Proxy – GÜK250 (BGR/Länder), Darstellung generalisiert"
+  url: "https://beispiel.quelle/guek250"  # echte Quelle nachtragen
+
+capabilities:
+  # Metadaten für /v1/capabilities (Option, beyond MVP)
+  custom: false
+
+notes:
+  - "Kontext-Rollen (fachlich) und Layer-Rollen (technisch) sind getrennt."
+  - "YAML ist Single Source of Truth; Compile → JSON DataObjects."
+  - "fieldMap: links Upstream, rechts kanonisch (Proxy normalisiert)."
+  - "URLs/Lizenzen real pflegen, Platzhalter sind hier exemplarisch."
