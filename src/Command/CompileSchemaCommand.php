@@ -33,6 +33,9 @@ class CompileSchemaCommand
     {
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($this->sourceDir));
         $errorsTotal = 0;
+        $validatedOk = 0;
+        $compiledOk = 0;
+        $skippedCount = 0;
 
         /** @var SplFileInfo $file */
         foreach ($iterator as $file) {
@@ -49,7 +52,7 @@ class CompileSchemaCommand
                 $data = Yaml::parseFile($file->getPathname());
                 if (!is_array($data)) $data = [];
             } catch (\Throwable $e) {
-                $this->stderr("❌ YAML parse error: {$relativePath}: {$e->getMessage()}");
+                $this->stderr("ERROR: YAML parse: {$relativePath}: {$e->getMessage()}");
                 $errorsTotal++;
                 continue;
             }
@@ -59,11 +62,13 @@ class CompileSchemaCommand
             $errors = array_merge($errors, $this->validateSemantics($data));
             if ($errors) {
                 foreach ($errors as $err) {
-                    $this->stderr("❌ {$relativePath}\n  path: {$err['path']}\n  error: {$err['message']}");
+                    $this->stderr("ERROR: {$relativePath}\n  path: {$err['path']}\n  error: {$err['message']}");
                 }
                 $errorsTotal += count($errors);
                 continue; // skip writing
             }
+            echo "[OK] Validated: {$relativePath}\n";
+            $validatedOk++;
 
             // Inject versions (schemaVersion from file; contentVersion from meta.version)
             $schemaVersion = $this->readSchemaVersion();
@@ -81,13 +86,16 @@ class CompileSchemaCommand
             $this->ensureDirectory(dirname($targetPath));
             $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             file_put_contents($targetPath, $json);
-            echo "✔ Compiled: {$relativePath} → {$targetPath}\n";
+            echo "[WRITE] Compiled: {$relativePath} -> {$targetPath}\n";
+            $compiledOk++;
         }
 
         if ($errorsTotal > 0) {
-            $this->stderr("Build failed with {$errorsTotal} error(s).");
+            $this->stderr("BUILD FAILED: {$errorsTotal} error(s).");
             exit(1);
         }
+
+        echo "Summary: validated={$validatedOk}, compiled={$compiledOk}, skipped={$skippedCount}, errors={$errorsTotal}\n";
     }
 
     /** @return list<array{path:string,message:string}> */
