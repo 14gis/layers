@@ -3,6 +3,8 @@
 define('PROJECT_ROOT', realpath(__DIR__ . '/..'));
 define('COMPILED_DIR', PROJECT_ROOT . '/compiled/schema');
 
+require_once __DIR__ . '/Support/Remote.php';
+
 beforeAll(function () {
     static $done = false;         // verhindert Mehrfachlauf pro Prozess
     if ($done) return;

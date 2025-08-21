@@ -6,6 +6,12 @@ use Gis14\Layers\Infrastructure\Factory\LayerFactory;
 use Gis14\Layers\Infrastructure\Gateway\FakeIdentifyGateway;
 use Gis14\Layers\Infrastructure\Gateway\IdentifyGatewayInterface;
 use Gis14\Layers\Infrastructure\Gateway\JsonLayerGateway;
+use Gis14\Layers\Infrastructure\Http\Upstream\FakeUpstreamClient;
+use Gis14\Layers\Infrastructure\Http\Upstream\RealUpstreamClient;
+use Gis14\Layers\Infrastructure\Http\Upstream\RecordingUpstreamClient;
+use Gis14\Layers\Infrastructure\Http\Upstream\ReplayUpstreamClient;
+use Gis14\Layers\Infrastructure\Http\Upstream\SimpleJsonLogger;
+use Gis14\Layers\Infrastructure\Http\Upstream\UpstreamClientInterface;
 use Gis14\Layers\Infrastructure\Repository\LayerRepository;
 use Gis14\Layers\Infrastructure\Repository\LayerRepositoryInterface;
 use Gis14\Layers\Kernel\{Dispatcher, TinyContainer};
@@ -18,7 +24,11 @@ $psr17 = new Psr17Factory();
 $creator = new ServerRequestCreator($psr17, $psr17, $psr17, $psr17);
 $request = $creator->fromGlobals();
 
-$compiledDir = getenv('COMPILED_DIR') ?: __DIR__.'/../compiled/schema';
+$compiledDir = getenv('COMPILED_DIR') ?: __DIR__ . '/../compiled/schema';
+
+$recordDir = getenv('UPSTREAM_RECORD_DIR') ?: __DIR__ . '/../var/cassettes';
+$debugLog  = getenv('LAYERS_DEBUG_LOG') ?: null; // z.B. __DIR__.'/../var/layers-debug.log'
+$logger    = new SimpleJsonLogger($debugLog);
 
 $container = new TinyContainer();
 $container->set(LayerRepositoryInterface::class, fn() =>
@@ -27,6 +37,16 @@ $container->set(LayerRepositoryInterface::class, fn() =>
         new LayerFactory()
     )
 );
+
+$container->set(UpstreamClientInterface::class, function () use ($logger, $recordDir) {
+    $mode = getenv('UPSTREAM_MODE') ?: 'real'; // real|fake|record|replay
+    return match ($mode) {
+        'fake'   => new FakeUpstreamClient(),
+        'record' => new RecordingUpstreamClient(new RealUpstreamClient(), $recordDir, $logger),
+        'replay' => new ReplayUpstreamClient($recordDir, $logger),
+        default  => new RealUpstreamClient(),
+    };
+});
 
 // choose identify gateway via ENV (default: fake for now)
 $container->set(IdentifyGatewayInterface::class, fn() =>
@@ -43,7 +63,14 @@ $container->set(IdentifyHandler::class, fn($c) =>
     )
 );
 
-$container->set(ProxyHandler::class, fn($c) => new ProxyHandler($c->get(LayerRepositoryInterface::class), $psr17));
+$container->set(ProxyHandler::class, fn($c) =>
+    new ProxyHandler(
+        $c->get(LayerRepositoryInterface::class),
+        $psr17,
+        $c->get(UpstreamClientInterface::class),
+        $logger
+    )
+);
 
 $dispatcher = FastRoute\simpleDispatcher(function (RouteCollector $r) {
     $r->addRoute('GET', '/v1/api/capabilities', CapabilitiesHandler::class);

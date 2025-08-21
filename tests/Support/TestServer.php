@@ -21,7 +21,7 @@ final class TestServer
         $self->port = $port ?? self::findFreePort($self->host);
         $self->logFile = sys_get_temp_dir() . '/php-server-' . bin2hex(random_bytes(4)) . '.log';
 
-        $cmd = sprintf('php -S %s:%d -t %s', $self->host, $self->port, escapeshellarg($docroot));
+        $cmd = sprintf('php -S %s:%d %s/index.php', $self->host, $self->port, escapeshellarg($docroot));
         $desc = [
             0 => ['pipe', 'r'],
             1 => ['file', $self->logFile, 'a'],
@@ -43,10 +43,14 @@ final class TestServer
         return $self;
     }
 
+    public function baseUrl(): string {
+        return sprintf('http://%s:%d', $this->host, $this->port);
+    }
+
     public function url(string $path = '/'): string
     {
         $path = '/' . ltrim($path, '/');
-        return sprintf('http://%s:%d%s', $this->host, $this->port, $path);
+        return sprintf('%s%s', $this->baseUrl(), $path);
     }
 
     public function port(): int
@@ -88,19 +92,37 @@ final class TestServer
         return (int)end($parts);
     }
 
+
     private function waitReady(string $path, float $timeoutSeconds = 5.0): void
     {
         $deadline = microtime(true) + $timeoutSeconds;
-        $url = $this->url($path);
-        $ctx = stream_context_create(['http' => ['timeout' => 0.2]]);
+        $host     = $this->host ?? '127.0.0.1';
+        $port     = $this->port();
+        $url      = $this->url($path);
+        
+        usleep(100000); // 100 ms
+
+        // 1) TCP-Port still prüfen (keine Warnings):
+        $socketOpen = false;
         while (microtime(true) < $deadline) {
-            $res = @file_get_contents($url, false, $ctx);
-            if ($res !== false) {
-                return;
-            }
-            usleep(100000);
+            $fp = @fsockopen($host, $port, $errno, $errstr, 0.2); // @ = keine Warning
+            if ($fp) { fclose($fp); $socketOpen = true; break; }
+            usleep(100000); // 100 ms
         }
-        $this->stop();
-        throw new \RuntimeException('Server did not become ready in time: ' . $url);
+        if (!$socketOpen) {
+            $this->stop();
+            throw new \RuntimeException("Server socket not open in time: $host:$port");
+        }
+
+        // 2) Eine schlanke HTTP-HEAD-Probe (ohne Warnings):
+        $ctx  = stream_context_create(['http'=>[
+            'method'        => 'HEAD',
+            'timeout'       => 0.8,
+            'ignore_errors' => true,
+        ]]);
+        @file_get_contents($url, false, $ctx); // bewusst kein Retry; Server ist am Port erreichbar
     }
+
+
+
 }

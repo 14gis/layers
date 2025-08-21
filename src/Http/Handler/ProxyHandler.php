@@ -1,6 +1,8 @@
 <?php // src/Http/Handler/ProxyHandler.php
 namespace Gis14\Layers\Http\Handler;
 
+use Gis14\Layers\Infrastructure\Http\Upstream\SimpleJsonLogger;
+use Gis14\Layers\Infrastructure\Http\Upstream\UpstreamClientInterface;
 use Gis14\Layers\Infrastructure\Repository\LayerRepositoryInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -11,7 +13,9 @@ final class ProxyHandler implements RequestHandlerInterface
 {
     public function __construct(
         private LayerRepositoryInterface $repo,
-        private ResponseFactoryInterface $responses
+        private ResponseFactoryInterface $responses,
+        private UpstreamClientInterface $upstream,
+        private ?SimpleJsonLogger $logger = null
     ) {}
 
     public function handle(ServerRequestInterface $request): ResponseInterface
@@ -19,8 +23,8 @@ final class ProxyHandler implements RequestHandlerInterface
         $p = (array) $request->getAttribute('routeParams', []);
         $context = $p['context'] ?? 'geochron';
         $layerId = $p['layerId'] ?? '';
-
         $rest   = $p['rest'] ?? '';
+        
         $layer  = $this->repo->findOne($context, $layerId);
 
         $featUrl = $layer['source']['features']['url'] ?? null;
@@ -43,57 +47,50 @@ final class ProxyHandler implements RequestHandlerInterface
         $target = $base . '/' . ltrim($rest, '/');
 
         // ???
-        if (preg_match('~/query\b~i', $rest) && isset($layer['source']['features']['layers'][0])) {
-            $idx   = $layer['source']['features']['layers'][0];
-            $target = $base . '/' . $idx . '/' . ltrim($rest, '/'); // …/MapServer/{0}/query
+        // NOTE: Some ArcGIS services accept `/query` both on the service root 
+        // (`.../MapServer/query`) and on a specific layer (`.../MapServer/{layerId}/query`).
+        // Our configured `features.url` usually already points to a concrete layer 
+        // (e.g. `.../MapServer/0`), so appending the path is enough.
+        // This extra branch tries to be tolerant if a request comes in without layerId
+        // and rewrites it to include the first configured layer index.
+        //
+        // If you always work with explicit layerIds, you can remove this branch safely.
+        $needsIndex = preg_match('~^(query|identify)\b~i', $rest) === 1;
+        $hasIndex   = preg_match('~^\d+/(query|identify)\b~i', $rest) === 1;
+
+        if ($needsIndex && !$hasIndex && isset($layer['source']['features']['layers'][0])) {
+            $idx  = $layer['source']['features']['layers'][0]; // z.B. 0
+            $rest = $idx . '/' . ltrim($rest, '/');            // -> "0/query"
         }
-        // ???
 
         $query = $request->getUri()->getQuery();
         if ($query !== '') $target .= '?' . $query;
 
-        // cURL pass-through (GET/POST), minimal headers. Never log secrets.
-        $ch = curl_init($target);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HEADER, true);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
-
+        // Header bauen (Secrets optional aus ENV)
         $headers = [];
-        // Upstream identity
-        if ($ref = getenv('LAYERS_REFERER')) { $headers[] = 'Referer: '.$ref; }
-        if ($key = getenv('ARCGIS_API_KEY')) { $headers[] = 'X-API-Key: '.$key; }
-        // Content-type for POST
-        $body = (string)$request->getBody();
+        if ($ref = getenv('LAYERS_REFERER')) $headers['Referer'] = $ref;
+        if ($key = getenv('ARCGIS_API_KEY'))  $headers['X-API-Key'] = $key;
         if (in_array($request->getMethod(), ['POST','PUT','PATCH'], true)) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-            if ($ct = $request->getHeaderLine('Content-Type')) $headers[] = 'Content-Type: '.$ct;
+            if ($ct = $request->getHeaderLine('Content-Type')) $headers['Content-Type'] = $ct;
         }
-        if ($headers) curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        
+        $bodyIn = (string) $request->getBody();
 
-        $resp = curl_exec($ch);
-        if ($resp === false) {
-            $err = curl_error($ch);
-            curl_close($ch);
-            $res = $this->responses->createResponse(502)->withHeader('Content-Type','application/json');
-            $res->getBody()->write(json_encode(['error'=>'Bad Gateway','detail'=>$err]));
-            return $res;
-        }
-        $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE) ?: 200;
-        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE) ?: 0;
-        $hdr = substr($resp, 0, $headerSize);
-        $bodyOut = substr($resp, $headerSize);
-        curl_close($ch);
+        $t0 = hrtime(true);
+        $resArr = $this->upstream->request($request->getMethod(), $target, $headers, $bodyIn);
+        $dt = (hrtime(true)-$t0)/1e6;
 
-        $res = $this->responses->createResponse($status);
-        foreach (explode("\r\n", trim($hdr)) as $line) {
-            if (stripos($line, 'HTTP/') === 0 || $line === '') continue;
-            [$name, $value] = array_map('trim', explode(':', $line, 2));
-            // drop hop-by-hop headers
-            if (in_array(strtolower($name), ['transfer-encoding','connection','keep-alive','proxy-authenticate','proxy-authorization','te','trailer','upgrade'], true)) continue;
-            $res = $res->withHeader($name, $value);
-        }
-        if (!$res->hasHeader('Content-Type')) $res = $res->withHeader('Content-Type','application/octet-stream');
-        $res->getBody()->write($bodyOut);
+        $this->logger?->log('info', [
+            'event'=>'proxy',
+            'method'=>$request->getMethod(),
+            'target'=>$target,
+            'status'=>$resArr['status'],
+            'ms'=>$dt
+        ]);
+
+        $res = $this->responses->createResponse($resArr['status']);
+        foreach ($resArr['headers'] as $k=>$v) $res = $res->withHeader($k, $v);
+        $res->getBody()->write($resArr['body']);
         return $res;
     }
 }
