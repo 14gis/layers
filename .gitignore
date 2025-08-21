@@ -4,3 +4,4 @@
 /.composer/
 /cache/
 /compiled/
+/var/
