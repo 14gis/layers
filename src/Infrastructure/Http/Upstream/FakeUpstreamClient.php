@@ -17,7 +17,7 @@ final class FakeUpstreamClient implements UpstreamClientInterface
         ]];
     }
 
-    public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+    public function request(string $method, string $url, array $headers = [], ?string $body = null, ?string $context = null): array
     {
         foreach ($this->rules as $r) {
             if (preg_match($r['pattern'], $url)) {

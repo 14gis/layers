@@ -9,14 +9,18 @@ final class RecordingUpstreamClient implements UpstreamClientInterface
         private ?SimpleJsonLogger $logger = null
     ) {}
 
-    public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+    public function request(string $method, string $url, array $headers = [], ?string $body = null, ?string $context = null): array
     {
         $t0 = hrtime(true);
-        $res = $this->inner->request($method, $url, $headers, $body);
+        $res = $this->inner->request($method, $url, $headers, $body, $context);
         $dt = (hrtime(true)-$t0)/1e6;
         
         $key = $this->cassetteKey($method, $url, $body);
-        if (!is_dir($this->dir)) @mkdir($this->dir, 0777, true);
+
+        $dir = $this->dir;
+        if ($context) $dir .= '/'.$context;
+
+        if (!is_dir($dir)) @mkdir($dir, 0777, true);
 
         $body = $res['body'] ?? '';
         $prettyBody = $body;
@@ -38,7 +42,6 @@ final class RecordingUpstreamClient implements UpstreamClientInterface
                 'status'  => $res['status'],
                 'headers' => $this->sanitize($res['headers']),
                 'body'    => $prettyBody, // Array statt escaped String
-                'originalBody'    => $body, // Array statt escaped String
             ],
             'meta' => [
                 'duration_ms' => $dt,
@@ -47,7 +50,7 @@ final class RecordingUpstreamClient implements UpstreamClientInterface
         
         
         file_put_contents(
-            $this->dir . '/' . $key . '.json',
+            $dir . '/' . $key . '.json',
             json_encode($cass, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
         );
 

@@ -8,7 +8,8 @@ interface UpstreamClientInterface
      * @param string $url    Absolute URL inkl. Query
      * @param array<string,string> $headers
      * @param string|null $body
+     * @param string|null $context
      * @return array{status:int, headers:array<string,string>, body:string}
      */
-    public function request(string $method, string $url, array $headers = [], ?string $body = null): array;
+    public function request(string $method, string $url, array $headers = [], ?string $body = null, ?string $context = null): array;
 }

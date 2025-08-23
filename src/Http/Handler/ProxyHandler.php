@@ -77,7 +77,7 @@ final class ProxyHandler implements RequestHandlerInterface
         $bodyIn = (string) $request->getBody();
 
         $t0 = hrtime(true);
-        $resArr = $this->upstream->request($request->getMethod(), $target, $headers, $bodyIn);
+        $resArr = $this->upstream->request($request->getMethod(), $target, $headers, $bodyIn, $context);
         $dt = (hrtime(true)-$t0)/1e6;
 
         $this->logger?->log('info', [

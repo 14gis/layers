@@ -5,7 +5,7 @@ final class RealUpstreamClient implements UpstreamClientInterface
 {
     public function __construct(private int $timeoutMs = 8000) {}
 
-    public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+    public function request(string $method, string $url, array $headers = [], ?string $body = null, ?string $context = null): array
     {
         $ch = curl_init($url);
         curl_setopt_array($ch, [

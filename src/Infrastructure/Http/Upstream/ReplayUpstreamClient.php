@@ -5,7 +5,7 @@ final class ReplayUpstreamClient implements UpstreamClientInterface
 {
     public function __construct(private string $dir, private ?SimpleJsonLogger $logger = null) {}
 
-    public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+    public function request(string $method, string $url, array $headers = [], ?string $body = null, ?string $context = null): array
     {
         $key = hash('sha256', $method.'|'.$url.'|'.($body ?? ''));
         $file = $this->dir.'/'.$key.'.json';
