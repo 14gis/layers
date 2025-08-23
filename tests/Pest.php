@@ -3,9 +3,12 @@
 define('PROJECT_ROOT', realpath(__DIR__ . '/..'));
 define('COMPILED_DIR', PROJECT_ROOT . '/compiled/schema');
 
+fwrite(STDERR, "[Pest.php] loaded\n");
+
+
 require_once __DIR__ . '/Support/Remote.php';
 
-beforeAll(function () {
+uses()->beforeAll(function () {
     static $done = false;         // verhindert Mehrfachlauf pro Prozess
     if ($done) return;
     $done = true;
@@ -18,4 +21,15 @@ beforeAll(function () {
     if ($code !== 0) {
         throw new RuntimeException("Compile failed:\n" . implode("\n", $out));
     }
-});
+})->in(__DIR__);
+
+// Remote tests policy:
+// - Default run: remote tests are skipped (see beforeEach below)
+// - Opt‑in: RUN_REMOTE_TESTS=1 ./vendor/bin/pest --group=remote
+uses()
+    ->beforeEach(function () {
+        if (in_array('remote', test()->groups(), true) && getenv('RUN_REMOTE_TESTS') !== '1') {
+            test()->markTestSkipped('Remote tests are disabled. Set RUN_REMOTE_TESTS=1 to enable.');
+        }
+    })
+    ->in(__DIR__.'/Remote');
